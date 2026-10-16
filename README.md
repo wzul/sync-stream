@@ -109,12 +109,41 @@ Details that matter:
 - a talk session expires on its own after 3.5 s of silence, so a phone that drops off does not leave
   everyone ducked forever.
 
+## Android app
+
+A browser will not start audio without a gesture, and it may kill a backgrounded tab. Neither is
+negotiable from inside a page, so `android/` is a small shell — a WebView plus a foreground service —
+that lifts both for a phone that is meant to stay on the stream:
+
+- **no tap to start** — `mediaPlaybackRequiresUserGesture = false`, so the sound begins on its own at
+  launch, every launch;
+- **keeps playing in the background** — a foreground service holds the process, so switching apps or
+  locking the screen no longer stops the music;
+- **lock-screen controls** — the media notification's play/pause/next/previous press the *room's*
+  buttons, so pausing from the lock screen pauses it for everybody;
+- **push-to-talk works properly** — the microphone is handed to the page behind a real permission
+  prompt;
+- **the password is typed once** — the session cookie survives restarts.
+
+```bash
+cd android
+echo "sdk.dir=$ANDROID_HOME" > local.properties        # gitignored
+./gradlew assembleRelease -PstreamUrl=https://your-host  # -> app/build/outputs/apk/release/
+```
+
+Without `-PstreamUrl=...` the build points at `https://example.com`: launch the app and it asks for
+the server address on first run (changeable later from the notification's **Server** action). Copy
+`keystore.properties.example` to `keystore.properties` and fill it in (gitignored) to sign the release
+build — otherwise Gradle leaves the APK unsigned. Needs JDK 17 and Android SDK 35; runs on Android
+8.0+. No third-party libraries: platform APIs only.
+
 ## Notes and limits
 
 - **Rooms live in memory and are checkpointed to `DATA_DIR/rooms.json`** — a few hundred bytes, not a
   database. A redeploy restores the stations and fast-forwards their playhead by the downtime.
 - **A full browser restart still needs one tap** before audio can start: that is the browser autoplay
-  policy, not something a page can bypass. An ordinary backgrounded tab keeps playing.
+  policy, not something a page can bypass. An ordinary backgrounded tab keeps playing. The
+  [Android app](#android-app) exists for exactly this reason.
 - **iOS ignores `element.volume`**, so the shared volume cannot be applied on iOS by the browser
   (the on-device volume buttons still work). Talk playback itself works, since it goes through
   Web Audio.
