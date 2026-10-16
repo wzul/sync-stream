@@ -1,0 +1,8 @@
+# nothing secret, nothing personal
+.env
+data/
+media/
+node_modules/
+
+# generated
+*.tmp

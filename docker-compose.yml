@@ -1,0 +1,25 @@
+services:
+  sync-stream:
+    build: .
+    image: sync-stream:latest
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    environment:
+      PORT: 8080
+      MEDIA_DIR: /media
+      DATA_DIR: /data
+      # Put your shared words in .env (see .env.example). Leave both unset for an open site.
+      # Either a file, mounted read-only:            SYNC_PASSWORDS_FILE: /run/secrets/words
+      # or directly:                                  SYNC_PASSWORDS: one,two,three
+      SYNC_PASSWORDS: ${SYNC_PASSWORDS:-}
+    volumes:
+      # your music and video
+      - ./media:/media
+      # room registry (a few hundred bytes of JSON), so rooms survive a restart
+      - ./data:/data
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://127.0.0.1:8080/healthz"]
+      interval: 30s
+      timeout: 5s
+      retries: 3

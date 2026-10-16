@@ -1,0 +1,905 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Sync Stream</title>
+<style>
+  :root{
+    --bg:#0b0d12; --panel:#141822; --panel2:#1b2130; --line:#242c3d;
+    --fg:#e8ecf4; --dim:#8b96ad; --acc:#5ee0a0; --acc2:#7aa2ff; --warn:#ffcf6b;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;height:100%}
+  body{
+    background:radial-gradient(1200px 600px at 15% -10%,#1a2740 0%,transparent 60%),var(--bg);
+    color:var(--fg);font:15px/1.45 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    -webkit-font-smoothing:antialiased;
+  }
+  header{
+    display:flex;align-items:center;gap:18px;padding:14px 20px;border-bottom:1px solid var(--line);
+    position:sticky;top:0;background:rgba(11,13,18,.86);backdrop-filter:blur(8px);z-index:5;flex-wrap:wrap
+  }
+  .brand{font-weight:700;letter-spacing:.3px}
+  .brand span{color:var(--acc)}
+  .hdr{color:var(--dim);font-size:13px}
+  .hdr b{color:var(--fg);font-weight:600}
+  .spacer{flex:1}
+  .pill{background:var(--panel);border:1px solid var(--line);border-radius:999px;padding:5px 12px;font-size:13px;color:var(--dim)}
+  .pill b{color:var(--acc)}
+  main{display:grid;grid-template-columns:minmax(0,1fr) 340px;gap:20px;padding:20px;max-width:1400px;margin:0 auto;align-items:start}
+  @media(max-width:900px){main{grid-template-columns:minmax(0,1fr)}}
+  /* A grid item defaults to min-width:auto, i.e. its min-content — which pushed the whole page
+     23px wider than a 360px phone. Both of these must stay. */
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:18px;min-width:0}
+  .stage{position:relative}
+  .visual{
+    position:relative;aspect-ratio:16/9;background:#05070c;border-radius:12px;overflow:hidden;
+    display:flex;align-items:center;justify-content:center;border:1px solid #1d2432
+  }
+  .visual video{width:100%;height:100%;object-fit:contain;display:none;background:#000}
+  .visual audio{display:none}
+  .visual.isvideo video{display:block}
+  .visual.isvideo .art{display:none}
+  .art{
+    width:100%;height:100%;display:flex;align-items:center;justify-content:center;gap:24px;flex-direction:column;
+    background:radial-gradient(600px 300px at 50% 40%,#1b2740 0%,#080b12 70%)
+  }
+  .disc{
+    width:170px;height:170px;border-radius:50%;
+    background:repeating-radial-gradient(circle at 50% 50%,#222c42 0 3px,#141c2c 3px 7px);
+    border:1px solid #3a4763;box-shadow:0 18px 50px rgba(0,0,0,.55);position:relative
+  }
+  .disc::after{content:"";position:absolute;inset:38%;border-radius:50%;background:var(--acc);opacity:.85}
+  .art.spin .disc{animation:spin 3.2s linear infinite}
+  @keyframes spin{to{transform:rotate(360deg)}}
+  .art .alabel{color:var(--dim);font-size:12.5px;letter-spacing:.08em;text-transform:uppercase;text-align:center;line-height:1.6;max-width:88%}
+  .np{margin-top:16px;display:flex;align-items:baseline;gap:10px;flex-wrap:wrap}
+  .np .t{font-size:19px;font-weight:650}
+  .np .m{color:var(--dim);font-size:13px}
+  .seek{display:flex;align-items:center;gap:12px;margin-top:14px}
+  .seek .t{font-variant-numeric:tabular-nums;color:var(--dim);font-size:13px;min-width:44px}
+  input[type=range]{
+    -webkit-appearance:none;appearance:none;background:transparent;flex:1;height:34px;margin:0;
+    touch-action:none;   /* a horizontal drag must never be read as a page scroll */
+  }
+  input[type=range]::-webkit-slider-runnable-track{height:6px;border-radius:6px;background:#2a3346}
+  input[type=range]::-moz-range-track{height:6px;border-radius:6px;background:#2a3346}
+  input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:20px;height:20px;border-radius:50%;background:var(--acc);margin-top:-7px;border:0}
+  input[type=range]::-moz-range-thumb{width:20px;height:20px;border-radius:50%;background:var(--acc);border:0}
+  .btns{display:flex;align-items:center;gap:10px;margin-top:16px;flex-wrap:wrap}
+  button{
+    background:var(--panel2);color:var(--fg);border:1px solid var(--line);border-radius:10px;
+    padding:9px 14px;font-size:14px;cursor:pointer;transition:.15s
+  }
+  button:hover{border-color:#3a4763;background:#212a3c}
+  button.primary{background:var(--acc);color:#04241a;border-color:var(--acc);font-weight:700;min-width:118px}
+  button.primary:hover{filter:brightness(1.08)}
+  button.onair{background:#c2382f;border-color:#e05a4f;color:#fff;font-weight:700}
+  button.onair:hover{background:#d0413a}
+  #talk b{color:#ff8f8f}
+  .vol{max-width:120px}
+  .status{display:flex;gap:16px;margin-top:14px;color:var(--dim);font-size:12.5px;flex-wrap:wrap}
+  .dot{display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--dim);margin-right:6px;vertical-align:1px}
+  .dot.live{background:var(--acc);box-shadow:0 0 8px var(--acc)}
+  .dot.warn{background:var(--warn)}
+  aside h3{font-size:12px;text-transform:uppercase;letter-spacing:.09em;color:var(--dim);margin:0 0 10px}
+  aside .card+.card{margin-top:16px}
+  ul.list{list-style:none;margin:0;padding:0;max-height:290px;overflow:auto}
+  ul.list li{
+    display:grid;grid-template-columns:18px minmax(0,1fr) auto;gap:10px;align-items:center;
+    min-height:44px;padding:8px 10px;border-radius:9px;cursor:pointer;font-size:14px
+  }
+  ul.list li:hover{background:var(--panel2)}
+  ul.list li.active{background:#16302a;border:1px solid #245b48}
+  ul.list li .idx{color:var(--dim);font-size:12px;text-align:right}
+  ul.list li .nm{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
+  ul.list li .du{color:var(--dim);font-size:12px;font-variant-numeric:tabular-nums}
+  ul.list li.empty{cursor:default;color:var(--dim);font-size:13px;display:block;line-height:1.5}
+  ul.rooms li{grid-template-columns:10px minmax(0,1fr) auto;gap:8px;min-height:52px;padding:9px 10px}
+  ul.rooms li .rn{font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  ul.rooms li .rt{display:block;color:var(--dim);font-size:12px;font-weight:400;overflow:hidden;
+    text-overflow:ellipsis;white-space:nowrap;margin-top:2px}
+  ul.rooms li .rl{color:var(--dim);font-size:12px;font-variant-numeric:tabular-nums}
+  ul.rooms li .rp{width:8px;height:8px;border-radius:50%;background:#3a4763}
+  ul.rooms li.on .rp{background:var(--acc);box-shadow:0 0 8px var(--acc)}
+  .newroom{display:flex;gap:8px;margin-top:12px}
+  .newroom input{flex:1;min-width:0;background:var(--panel2);border:1px solid var(--line);color:var(--fg);
+    border-radius:10px;padding:10px 12px;font-size:15px}
+  .newroom input:focus{outline:none;border-color:var(--acc)}
+  .signout{display:inline-block;margin-top:12px;color:var(--dim);font-size:13px;text-decoration:none}
+  .signout:hover{color:var(--fg)}
+  ul.feed{list-style:none;margin:0;padding:0;max-height:180px;overflow:auto;font-size:13px;color:var(--dim)}
+  ul.feed li{padding:4px 0;border-bottom:1px dashed #1e2534}
+  ul.feed li b{color:var(--fg);font-weight:600}
+  ul.feed li i{color:var(--acc);font-style:normal}
+  .up{margin-top:6px;font-size:12.5px;color:var(--dim);min-height:16px}
+  input[type=file]{font-size:13px;color:var(--dim);width:100%}
+  .overlay{
+    position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;
+    background:rgba(9,11,17,.94);backdrop-filter:blur(6px);border-radius:16px;z-index:3;text-align:center;
+    padding:22px;overflow:auto
+  }
+  .overlay.hidden{display:none}
+  .overlay h2{margin:0;font-size:20px}
+  .overlay p{margin:0;color:var(--dim);font-size:13.5px;max-width:380px}
+  .overlay input{
+    background:var(--panel2);border:1px solid var(--line);color:var(--fg);border-radius:10px;padding:10px 12px;font-size:15px;width:230px;text-align:center
+  }
+  .hidden{display:none!important}
+  .rowlink{display:flex;gap:8px;align-items:center;margin-top:6px}
+  .rowlink code{
+    flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;background:var(--panel2);
+    border:1px solid var(--line);border-radius:8px;padding:7px 9px;font-size:12px;color:var(--dim)
+  }
+
+  /* ------------------------------------------------------------------ phones */
+  /* Measured at 320 / 360 / 390 / 430px: the desktop layout is a two-column grid with a big
+     audio panel, 36px buttons and a 22px-tall seek bar. On a phone that wasted ~200px of height
+     above the fold and every control was under the 44px touch target. */
+  @media (max-width:640px){
+    header{padding:9px 14px;gap:10px}
+    .brand{font-size:15px}
+    .hdr{font-size:12.5px}
+    .pill{padding:4px 10px;font-size:12.5px}
+    main{padding:12px;gap:12px}
+    .card{padding:14px;border-radius:14px}
+    aside h3{margin-bottom:8px}
+    /* audio on a phone does not need a cinema screen above the fold */
+    .visual{aspect-ratio:auto;height:104px}
+    .visual.isvideo{aspect-ratio:16/9;height:auto}
+    .art{gap:10px}
+    .disc{width:66px;height:66px}
+    .alabel{display:none}
+    .np{margin-top:12px;gap:6px}
+    .np .t{font-size:16.5px}
+    .seek{margin-top:10px;gap:8px}
+    .seek .t{min-width:38px;font-size:12px}
+    .btns{margin-top:12px;gap:8px}
+    button{min-height:44px;padding:11px 14px;font-size:15px}
+    button.primary{flex:1;min-width:0}
+    .vol{flex:1 1 80px;max-width:none}
+    .status{gap:10px;font-size:12px;margin-top:10px}
+    .overlay{gap:10px;padding:16px;border-radius:14px}
+    .overlay h2{font-size:17px}
+    .overlay p{font-size:13px}
+    .overlay input{padding:12px;font-size:16px;width:100%;max-width:260px}
+    ul.list{max-height:264px}
+    ul.list li{min-height:48px;font-size:14.5px}
+    ul.feed{max-height:150px}
+    .rowlink code{font-size:11px}
+    body{padding-bottom:env(safe-area-inset-bottom)}
+  }
+</style>
+</head>
+<body>
+<header>
+  <div class="brand">◉ Sync <span>Stream</span></div>
+  <div class="hdr">room <b id="roomName">main</b></div>
+  <div class="spacer"></div>
+  <div class="pill"><b id="listeners">0</b> listening now</div>
+</header>
+
+<main>
+  <section class="card stage">
+    <div class="visual" id="visual">
+      <video id="player" playsinline preload="auto"></video>
+      <audio id="audioplayer" preload="auto"></audio>
+      <div class="art" id="art">
+        <div class="disc"></div>
+        <div class="alabel">everyone hears this at the same moment</div>
+      </div>
+    </div>
+
+    <div class="np">
+      <div class="t" id="npTitle">no track selected</div>
+      <div class="m" id="npMeta"></div>
+    </div>
+
+    <div class="seek">
+      <span class="t" id="tCur">0:00</span>
+      <input type="range" id="seek" min="0" max="10000" value="0" step="1">
+      <span class="t" id="tDur">0:00</span>
+    </div>
+
+    <div class="btns">
+      <button class="primary" id="playBtn">▶ Play</button>
+      <button id="prevBtn" title="previous">⏮</button>
+      <button id="nextBtn" title="next">⏭</button>
+      <button id="fsBtn" class="hidden" title="fullscreen">⛶</button>
+      <span class="hdr">vol</span>
+      <input type="range" id="vol" class="vol" min="0" max="100" value="100">
+      <button id="talkBtn" title="microphone: talk over the music for everyone">🎙 Talk</button>
+    </div>
+
+    <div class="status">
+      <span><span class="dot" id="connDot"></span><span id="conn">connecting…</span></span>
+      <span id="drift">sync: —</span>
+      <span id="talk"></span>
+      <span id="whos">you: —</span>
+    </div>
+
+    <!-- covers the whole card, not just the artwork: nothing under here is usable before joining -->
+    <div class="overlay" id="join">
+      <h2>Join the stream</h2>
+      <p>Audio playback needs one tap. Put your name in first — everyone sees who changed what.</p>
+      <input id="nameInput" maxlength="24" placeholder="Your name">
+      <button class="primary" id="joinBtn">▶ Join</button>
+    </div>
+  </section>
+
+  <aside>
+    <div class="card">
+      <h3>Playlist — tap to play for everyone</h3>
+      <ul class="list" id="playlist"></ul>
+    </div>
+    <div class="card">
+      <h3>Rooms — one stream each</h3>
+      <ul class="list rooms" id="rooms"></ul>
+      <div class="newroom">
+        <input id="roomInput" maxlength="24" placeholder="new room name"
+               autocapitalize="off" autocorrect="off" spellcheck="false">
+        <button id="roomGo">Go</button>
+      </div>
+    </div>
+    <div class="card">
+      <h3>Add music / video</h3>
+      <input type="file" id="file" multiple accept="audio/*,video/*">
+      <div class="up" id="upstat"></div>
+    </div>
+    <div class="card">
+      <h3>Activity</h3>
+      <ul class="feed" id="feed"></ul>
+    </div>
+    <div class="card">
+      <h3>Invite</h3>
+      <div class="rowlink"><code id="roomLink"></code><button id="copyBtn">copy</button></div>
+      <a class="signout" href="/logout">sign out</a>
+    </div>
+  </aside>
+</main>
+
+<script>
+(function(){
+  'use strict';
+  var $ = function(s){ return document.querySelector(s); };
+  var elVideo = document.querySelector('#player'), elAudio = document.querySelector('#audioplayer');
+  // For audio we play through a real <audio> element: Android keeps that alive when the tab is
+  // backgrounded or the screen locks, which it does not reliably do for a <video> element.
+  var player = elVideo;
+  var visual = $('#visual'), art = $('#art');
+
+  var roomId = (function(){
+    var q = new URLSearchParams(location.search).get('room') || '';
+    if(!q && location.pathname.indexOf('/r/') === 0){
+      try{ q = decodeURIComponent(location.pathname.slice(3).split('/')[0]); }catch(e){ q = ''; }
+    }
+    q = String(q).toLowerCase().trim().replace(/[^a-z0-9_-]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 24);
+    return q || 'main';
+  })();
+  var rq = function(u){ return u + (u.indexOf('?') < 0 ? '?' : '&') + 'room=' + encodeURIComponent(roomId); };
+  // Identifies THIS page to the server so a talk batch is never relayed back to the device that
+  // sent it — the DJ must not hear their own voice echoed a second later.
+  var clientId = (function(){
+    try{
+      var c = sessionStorage.getItem('syncstream.cid');
+      if(!c){ c = Math.random().toString(36).slice(2) + Date.now().toString(36); sessionStorage.setItem('syncstream.cid', c); }
+      return c;
+    }catch(e){ return 'c' + Math.random().toString(36).slice(2); }
+  })();
+
+  // Every call goes through here: an expired session must land the user back on the password page
+  // instead of leaving a page that quietly does nothing.
+  function api(url, opts){
+    return fetch(url, opts).then(function(r){
+      if(r.status === 401){ location.href = '/login'; throw new Error('auth'); }
+      return r;
+    });
+  }
+
+  var offset = 0, rtt = 0, state = null, media = [], currentMediaId = null, lastGen = -1, currentType = null;
+  var dragging = false, blocked = false, pendingSnap = false, lastSnap = 0, tickN = 0, askedDur = {};
+  var name = localStorage.getItem('syncstream.name') || '';
+  // Surviving a reload (Android discarding a backgrounded tab) matters more than a fresh consent
+  // tap: remember that this session already joined, and let the autoplay attempt decide.
+  var joined = (function(){ try{ return sessionStorage.getItem('syncstream.joined') === '1'; }catch(e){ return false; } })();
+
+  function serverNow(){ return Date.now() + offset; }
+  function esc(s){ return String(s).replace(/[&<>"']/g, function(c){ return ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[c]; }); }
+  function fmt(sec){
+    sec = Math.max(0, Math.floor(sec || 0));
+    var h = Math.floor(sec/3600), m = Math.floor((sec%3600)/60), s = sec%60;
+    return (h ? h + ':' + String(m).padStart(2,'0') : String(m)) + ':' + String(s).padStart(2,'0');
+  }
+
+  // ---------------------------------------------------------------- clock sync
+  async function syncClock(){
+    var best = null;
+    for(var i=0;i<4;i++){
+      var t0 = Date.now();
+      try{
+        var r = await fetch('/api/time', {cache:'no-store'});
+        var j = await r.json();
+        var t1 = Date.now(), srtt = t1 - t0;
+        var off = j.now - (t0 + t1) / 2;
+        if(!best || srtt < best.rtt) best = {rtt: srtt, off: off};
+      }catch(e){}
+      await new Promise(function(r){ return setTimeout(r, 50); });
+    }
+    if(best){ offset = best.off; rtt = best.rtt; }
+  }
+
+  // ---------------------------------------------------------------- control
+  function send(action, extra){
+    var body = Object.assign({action: action, actor: name || 'someone'}, extra || {});
+    return api(rq('/api/control'), {
+      method:'POST', headers:{'content-type':'application/json'}, body: JSON.stringify(body)
+    }).then(function(r){ return r.json(); }).catch(function(){ return null; });
+  }
+
+  // ---------------------------------------------------------------- playback
+  function tryPlay(){
+    player.play().then(function(){ blocked = false; $('#join').classList.add('hidden'); })
+      .catch(function(){ blocked = true; $('#join').classList.remove('hidden'); });
+  }
+
+  function bindMedia(el){
+    el.addEventListener('loadedmetadata', function(){
+      if(el !== player) return;
+      if(state) correct(true);
+      reportDuration();
+    });
+    el.addEventListener('ended', function(){
+      if(el === player && currentMediaId) send('ended', {mediaId: currentMediaId});
+    });
+    el.addEventListener('error', function(){
+      if(el === player && currentMediaId && el.getAttribute('src'))
+        $('#npMeta').textContent = 'cannot play this file — try mp3/m4a or mp4/webm';
+    });
+  }
+  bindMedia(elVideo);
+  bindMedia(elAudio);
+
+  function mediaFor(id){
+    for(var i=0;i<media.length;i++){ if(media[i].id === id) return media[i]; }
+    return null;
+  }
+
+  function mediaSessionMeta(m){
+    if(!('mediaSession' in navigator)) return;
+    try{
+      navigator.mediaSession.metadata = m ? new MediaMetadata({
+        title: m.name, artist: 'Sync Stream · room ' + roomId, album: 'shared stream'
+      }) : null;
+    }catch(e){}
+  }
+
+  function updateNP(){
+    var m = mediaFor(currentMediaId);
+    var isVideo = !!m && m.type === 'video';
+    currentType = m ? m.type : null;
+    visual.classList.toggle('isvideo', isVideo);
+    art.classList.toggle('spin', !!state && state.playing && !!m && !isVideo);
+    $('#fsBtn').classList.toggle('hidden', !isVideo);
+    $('#npTitle').textContent = m ? m.name : 'no track selected';
+    $('#npMeta').textContent = m ? (m.type + ' · ' + (m.size/1048576).toFixed(1) + ' MB') : 'pick something from the playlist';
+    document.title = (state && state.playing ? '▶ ' : '⏸ ') + (m ? m.name : 'Sync Stream');
+    mediaSessionMeta(m);
+  }
+
+  // Switch which element is the live one. Both stay in the page; only the active one holds a src.
+  function useElement(el){
+    if(player === el) return;
+    try{ player.pause(); }catch(e){}
+    try{ player.removeAttribute('src'); player.load(); }catch(e){}
+    player = el;
+    player.volume = ducked ? duckTarget() : volBase;
+  }
+
+  function loadMedia(id){
+    currentMediaId = id;
+    var m = mediaFor(id);
+    if(!id){
+      try{ player.pause(); player.removeAttribute('src'); player.load(); }catch(e){}
+      pendingSnap = false; updateNP(); return;
+    }
+    useElement(m && m.type === 'video' ? elVideo : elAudio);
+    var want = (m && m.url) || ('/media/' + encodeURIComponent(id));
+    if(player.getAttribute('src') !== want){ player.src = want; player.load(); }
+    pendingSnap = true;
+    updateNP();
+    renderPlaylist();
+  }
+
+  function correct(hard){
+    if(!state || !state.mediaId || !currentMediaId || dragging) return;
+    var desired = (state.posMs + (state.playing ? Math.max(0, serverNow() - state.anchor) : 0)) / 1000;
+    var cur = player.currentTime || 0;
+    var drift = desired - cur;
+    var ms = Math.round(drift * 1000);
+    $('#drift').textContent = 'sync: ' + (ms >= 0 ? '+' : '') + ms + ' ms   (net ±' + Math.round(rtt/2) + 'ms)';
+    var now = Date.now();
+    // A change made by anyone (hard) or a fresh source (pendingSnap) snaps at once; a drift that
+    // grows past 200 ms snaps too, but at most every 2.5 s so the correction itself never becomes
+    // the stutter. Everything below that is closed with a small playback-rate nudge.
+    var needSnap = Math.abs(drift) > 0.6 || (Math.abs(drift) > 0.20 && (now - lastSnap > 2500));
+    if(hard || pendingSnap || needSnap){
+      lastSnap = now;
+      try{ player.currentTime = Math.max(0, desired); }catch(e){}
+      player.playbackRate = 1;
+      pendingSnap = false;
+    }else if(state.playing && !player.paused){
+      player.playbackRate = Math.abs(drift) < 0.02 ? 1 : Math.min(1.05, Math.max(0.95, 1 + drift / 4));
+    }else{
+      player.playbackRate = 1;
+    }
+    if(state.playing && player.paused && joined && !blocked) tryPlay();
+    if(!state.playing && !player.paused) player.pause();
+  }
+
+  function apply(s){
+    var prev = state;
+    state = s;
+    $('#listeners').textContent = s.listeners;
+    var changed = !prev || s.gen !== prev.gen;
+    var mediaChanged = s.mediaId !== currentMediaId;
+    if(changed){
+      lastGen = s.gen;
+      if(s.actor && s.action) addFeed(s.actor, s.action, s);
+    }
+    if(mediaChanged) loadMedia(s.mediaId);
+    // Volume changes deliberately do NOT bump `gen`, so they never force a playhead snap.
+    if(typeof s.volume === 'number') applyVolume(s.volume);
+    setDucked(!!s.talking);
+    $('#talk').innerHTML = s.talking ? '🎙 <b>' + esc(s.talker || 'someone') + ' on air</b>' : '';
+    // Only snap when something really moved: a duration report from another client carries the
+    // same gen, and there is no reason to touch the playhead for it.
+    correct(changed || mediaChanged);
+    $('#playBtn').textContent = s.playing ? '⏸ Pause' : '▶ Play';
+    updateNP();
+  }
+
+  // ---------------------------------------------------------------- DJ talk
+  // Listener side: the server relays ~340 ms PCM batches; they go into a small jitter buffer and
+  // are played through Web Audio — the one playback path that behaves the same on iOS, Android and
+  // desktop. No container format, no codec support matrix.
+  var TALK_RATE = 12000, talkCtx = null, talkCursor = 0;
+  function audioCtx(){
+    if(talkCtx) return talkCtx;
+    var C = window.AudioContext || window.webkitAudioContext;
+    if(!C) return null;
+    try{ talkCtx = new C(); }catch(e){ return null; }
+    return talkCtx;
+  }
+  function playTalk(b64, rate){
+    var ctx = audioCtx();
+    if(!ctx) return;
+    if(ctx.state === 'suspended') ctx.resume();
+    var bin = atob(b64), n = bin.length >> 1;
+    if(n < 32) return;
+    var bytes = new Uint8Array(bin.length);
+    for(var i=0;i<bin.length;i++) bytes[i] = bin.charCodeAt(i);
+    var pcm = new Int16Array(bytes.buffer, 0, n);
+    var buf = ctx.createBuffer(1, n, rate);
+    var ch = buf.getChannelData(0);
+    for(var j=0;j<n;j++) ch[j] = pcm[j] / 32768;
+    var src = ctx.createBufferSource();
+    src.buffer = buf;
+    src.connect(ctx.destination);
+    var now = ctx.currentTime;
+    if(talkCursor < now + 0.05) talkCursor = now + 0.12;   // underrun: restart the jitter buffer
+    if(talkCursor > now + 1.5) talkCursor = now + 0.12;    // runaway backlog: drop it
+    try{ src.start(talkCursor); }catch(e){}
+    talkCursor += buf.duration;
+  }
+
+  // DJ side: capture the mic, decimate to 12 kHz mono PCM, post in ~340 ms batches.
+  var dj = null, djBuf = [], djBufLen = 0, djSeq = 0;
+  function downsample(inp, inRate, outRate){
+    if(outRate >= inRate) return inp.slice(0);
+    var ratio = inRate / outRate, n = Math.floor(inp.length / ratio);
+    var out = new Float32Array(n);
+    for(var i=0;i<n;i++){
+      var pos = i * ratio, i0 = Math.floor(pos), f = pos - i0;
+      var a = inp[i0] || 0, b = inp[i0 + 1] !== undefined ? inp[i0 + 1] : a;
+      out[i] = a * (1 - f) + b * f;
+    }
+    return out;
+  }
+  function toPcm(f32){
+    var pcm = new Int16Array(f32.length);
+    for(var j=0;j<f32.length;j++){
+      var v = Math.round(f32[j] * 32767);
+      pcm[j] = v < -32768 ? -32768 : (v > 32767 ? 32767 : v);
+    }
+    return pcm;
+  }
+  function flushTalk(){
+    if(!djBufLen) return;
+    var all = new Float32Array(djBufLen), o = 0;
+    for(var i=0;i<djBuf.length;i++){ all.set(djBuf[i], o); o += djBuf[i].length; }
+    djBuf = []; djBufLen = 0;
+    var pcm = toPcm(all);
+    api('/api/talk?actor=' + encodeURIComponent(name || 'dj'), {
+      method: 'POST',
+      headers: { 'content-type': 'application/octet-stream', 'x-talking': '1', 'x-seq': String(++djSeq),
+                 'x-cid': clientId },
+      body: new Uint8Array(pcm.buffer),
+    }).catch(function(){});
+    if(dj) dj.sent++;
+  }
+  function djStart(){
+    if(dj) return;
+    if(!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia){
+      $('#talk').innerHTML = '<b>this browser has no microphone access</b>';
+      return;
+    }
+    navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true } })
+      .then(function(stream){
+        var ctx = audioCtx();
+        if(!ctx){ stream.getTracks().forEach(function(t){ t.stop(); }); return; }
+        if(ctx.state === 'suspended') ctx.resume();
+        var src = ctx.createMediaStreamSource(stream);
+        var proc = ctx.createScriptProcessor(4096, 1, 1);
+        var mute = ctx.createGain(); mute.gain.value = 0;   // never echo the mic back locally
+        djBuf = []; djBufLen = 0; djSeq = 0;
+        proc.onaudioprocess = function(ev){
+          if(!dj) return;
+          var out = downsample(ev.inputBuffer.getChannelData(0), ctx.sampleRate, TALK_RATE);
+          djBuf.push(out); djBufLen += out.length;
+          if(djBufLen >= TALK_RATE * 0.34) flushTalk();
+        };
+        src.connect(proc); proc.connect(mute); mute.connect(ctx.destination);
+        dj = { stream: stream, src: src, proc: proc, mute: mute, sent: 0 };
+        $('#talkBtn').className = 'onair';
+        $('#talkBtn').textContent = '🎙 on air';
+        // If the browser cannot actually run the audio graph (no output device, context stuck
+        // suspended) nothing is sent at all — say so instead of looking like it works.
+        setTimeout(function(){
+          if(dj && dj.sent === 0){
+            $('#talk').innerHTML = '<b>mic opened but no audio is flowing — check the browser\'s sound</b>';
+          }
+        }, 2500);
+      })
+      .catch(function(e){
+        $('#talk').innerHTML = '<b>mic blocked (' + esc((e && e.name) || 'error') + ')</b>';
+      });
+  }
+  function djStop(){
+    if(!dj) return;
+    try{ flushTalk(); }catch(e){}
+    try{
+      dj.proc.disconnect(); dj.src.disconnect(); dj.mute.disconnect();
+      dj.stream.getTracks().forEach(function(t){ t.stop(); });
+    }catch(e){}
+    dj = null;
+    $('#talkBtn').className = '';
+    $('#talkBtn').textContent = '🎙 Talk';
+    api('/api/talk?actor=' + encodeURIComponent(name || 'dj'),
+        { method: 'POST', headers: { 'content-type': 'application/octet-stream', 'x-talking': '0' } })
+      .catch(function(){});
+  }
+
+  // ---------------------------------------------------------------- SSE
+  var es = null, esErrors = 0;
+  function connect(){
+    try{ es && es.close(); }catch(e){}
+    es = new EventSource(rq('/api/events') + '&cid=' + encodeURIComponent(clientId));
+    es.onopen = function(){ esErrors = 0; setConn('live', 'live'); };
+    es.onerror = function(){
+      // A dropped session looks exactly like a flaky connection; after ~8s of failures the honest
+      // move is to reload and let the gate ask for the password again.
+      if(++esErrors > 4){ location.href = '/login'; return; }
+      setConn('reconnecting…', 'warn');
+    };
+    es.onmessage = function(ev){
+      esErrors = 0;
+      try{ apply(JSON.parse(ev.data)); }catch(e){}
+    };
+    es.addEventListener('talk', function(ev){
+      var d;
+      try{ d = JSON.parse(ev.data); }catch(e){ return; }
+      if(d.pcm) playTalk(d.pcm, d.rate || TALK_RATE);
+      else if(d.start) audioCtx();     // the DJ is already on air: wake the audio context now
+    });
+  }
+  function setConn(txt, cls){
+    if($('#conn').textContent === txt && $('#connDot').dataset.cls === cls) return;
+    $('#conn').textContent = txt;
+    $('#connDot').dataset.cls = cls || '';
+    $('#connDot').className = 'dot' + (cls === 'live' ? ' live' : (cls ? ' warn' : ''));
+  }
+
+  // ---------------------------------------------------------------- playlist + upload
+  function renderPlaylist(){
+    var ul = $('#playlist'); ul.innerHTML = '';
+    if(!media.length){
+      ul.innerHTML = '<li class="empty">No media yet. Upload one on the right, or drop files into the server\'s media folder.</li>';
+      return;
+    }
+    media.forEach(function(m, i){
+      var li = document.createElement('li');
+      li.className = (m.id === currentMediaId ? 'active' : '');
+      li.innerHTML = '<span class="idx">' + (i+1) + '</span>' +
+        '<span class="nm">' + (m.type === 'video' ? '🎬 ' : '🎵 ') + esc(m.name) + '</span>' +
+        '<span class="du">' + (m.durationMs ? fmt(m.durationMs/1000) : '') + '</span>';
+      li.onclick = function(){ if(name){ send('select', {mediaId: m.id}); } else { $('#join').classList.remove('hidden'); } };
+      ul.appendChild(li);
+    });
+  }
+
+  function loadMediaList(){
+    return api('/api/media', {cache:'no-store'}).then(function(r){ return r.json(); })
+      .then(function(j){ media = j.media || []; renderPlaylist(); probeDurations(); })
+      .catch(function(){});
+  }
+
+  // ---------------------------------------------------------------- rooms
+  function renderRooms(list){
+    var ul = $('#rooms'); ul.innerHTML = '';
+    if(!list.length){
+      ul.innerHTML = '<li class="empty">No rooms yet — make one below. Each room is its own stream.</li>';
+      return;
+    }
+    list.forEach(function(r){
+      var li = document.createElement('li');
+      li.className = (r.id === roomId ? 'active ' : '') + (r.playing ? 'on' : '');
+      var sub = r.track ? esc(r.track) : 'nothing queued';
+      if(r.playing && r.durationMs) sub += ' · ' + fmt(r.posMs / 1000) + '/' + fmt(r.durationMs / 1000);
+      li.innerHTML = '<span class="rp"></span>' +
+        '<span class="rn">' + esc(r.id) + '<span class="rt">' + sub + '</span></span>' +
+        '<span class="rl">' + (r.listeners ? '👤' + r.listeners : '') + '</span>';
+      li.onclick = function(){ if(r.id !== roomId) location.href = '/r/' + encodeURIComponent(r.id); };
+      ul.appendChild(li);
+    });
+  }
+  function loadRooms(){
+    return api(rq('/api/rooms'), {cache:'no-store'}).then(function(r){ return r.json(); })
+      .then(function(j){ renderRooms(j.rooms || []); })
+      .catch(function(){});
+  }
+  function goRoom(name){
+    var slug = String(name || '').toLowerCase().trim()
+      .replace(/[^a-z0-9_-]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 24);
+    if(!slug){ $('#roomInput').focus(); return; }
+    if(slug === roomId){ $('#roomInput').value = ''; return; }
+    var go = function(){ location.href = '/r/' + encodeURIComponent(slug); };
+    api(rq('/api/rooms'), { method:'POST', headers:{'content-type':'application/json'},
+      body: JSON.stringify({name: slug}) }).then(go).catch(go);
+  }
+
+  function addFeed(actor, action, s){
+    var txt = {play:'pressed play', pause:'pressed pause', seek:'jumped to ' + fmt(s.posMs/1000),
+               select:'put on a track', next:'skipped forward', prev:'went back', end:'track ended'}[action] || action;
+    var li = document.createElement('li');
+    li.innerHTML = '<b>' + esc(actor) + '</b> <i>' + esc(txt) + '</i>';
+    var f = $('#feed'); f.insertBefore(li, f.firstChild);
+    while(f.children.length > 14) f.removeChild(f.lastChild);
+  }
+
+  function upFile(file){
+    return new Promise(function(resolve){
+      var x = new XMLHttpRequest();
+      x.open('POST', '/upload');
+      x.setRequestHeader('X-Filename', encodeURIComponent(file.name));
+      x.setRequestHeader('Content-Type', 'application/octet-stream');
+      x.upload.onprogress = function(e){
+        if(e.lengthComputable) $('#upstat').textContent = file.name + ' — ' + Math.round(e.loaded/e.total*100) + '%';
+      };
+      x.onload = function(){ resolve(x.status === 200); };
+      x.onerror = function(){ resolve(false); };
+      x.send(file);
+    });
+  }
+
+  // ---------------------------------------------------------------- events
+  function reportDuration(){
+    if(!currentMediaId || !isFinite(player.duration) || player.duration < 1) return;
+    send('meta', {mediaId: currentMediaId, durationMs: Math.round(player.duration * 1000)});
+    setTimeout(loadMediaList, 1200);
+  }
+
+  // Ask the browser for the length of every file we do not know yet, one at a time. The server
+  // needs a duration to be able to roll the playlist on when nobody is listening, and this fills
+  // them in for the whole library as soon as one listener shows up.
+  var probing = false;
+  function probeDurations(){
+    if(probing) return;
+    var todo = media.filter(function(m){ return !m.durationMs && !askedDur[m.id]; });
+    if(!todo.length) return;
+    todo = todo.slice(0, 12);
+    probing = true;
+    var i = 0;
+    (function next(){
+      if(i >= todo.length){ probing = false; return; }
+      var m = todo[i++];
+      askedDur[m.id] = 1;
+      var a = new Audio(), done = false;
+      var finish = function(ok){
+        if(done) return; done = true;
+        if(ok && isFinite(a.duration) && a.duration > 0.5) send('meta', {mediaId: m.id, durationMs: Math.round(a.duration * 1000)});
+        try{ a.removeAttribute('src'); a.load(); }catch(e){}
+        setTimeout(next, 150);
+      };
+      a.preload = 'metadata';
+      a.addEventListener('loadedmetadata', function(){ finish(true); });
+      a.addEventListener('error', function(){ finish(false); });
+      setTimeout(function(){ finish(false); }, 20000);
+      a.src = m.url || ('/media/' + encodeURIComponent(m.id));
+    })();
+  }
+
+  // Android shows a media notification / lock-screen card from this, which is what keeps the page
+  // treated as active audio; its buttons drive the ROOM, not just this device.
+  function mediaSessionControls(){
+    if(!('mediaSession' in navigator)) return;
+    var H = function(a, f){ try{ navigator.mediaSession.setActionHandler(a, f); }catch(e){} };
+    H('play', function(){ send('play'); });
+    H('pause', function(){ send('pause'); });
+    H('nexttrack', function(){ send('next'); });
+    H('previoustrack', function(){ send('prev'); });
+    H('seekto', function(d){ if(d && isFinite(d.seekTime)) send('seek', {posMs: Math.round(d.seekTime * 1000)}); });
+  }
+
+  function mediaSessionPosition(){
+    if(!('mediaSession' in navigator) || !navigator.mediaSession.setPositionState) return;
+    var d = player.duration;
+    if(!isFinite(d) || d <= 0) return;
+    try{
+      navigator.mediaSession.setPositionState({ duration: d, position: Math.min(player.currentTime, d), playbackRate: 1 });
+    }catch(e){}
+  }
+
+  $('#playBtn').onclick = function(){ send(state && state.playing ? 'pause' : 'play'); };
+  $('#nextBtn').onclick = function(){ send('next'); };
+  $('#prevBtn').onclick = function(){ send('prev'); };
+  $('#fsBtn').onclick = function(){
+    if(document.fullscreenElement) document.exitFullscreen(); else visual.requestFullscreen();
+  };
+  // Volume is a ROOM setting, not a personal one — like one shared speaker. Whoever turns it down
+  // turns it down for everyone listening. Applied locally first so the slider feels instant, then
+  // sent to the room (throttled while dragging). While the DJ talks, music ducks rather than mutes.
+  var volTimer = null, volBase = 1, ducked = false, fadeTimer = null;
+  var DUCK = 0.18;                       // music drops to 18% of room volume under a voice
+  function duckTarget(){ return Math.max(0.02, volBase * DUCK); }
+  function fadeMusic(target){
+    clearInterval(fadeTimer);
+    var from = elAudio.volume, steps = 6, i = 0;
+    fadeTimer = setInterval(function(){
+      i++;
+      var v = from + (target - from) * (i / steps);
+      elAudio.volume = v; elVideo.volume = v;
+      if(i >= steps) clearInterval(fadeTimer);
+    }, 40);
+  }
+  function setDucked(on){
+    if(ducked === on) return;
+    ducked = on;
+    fadeMusic(on ? duckTarget() : volBase);
+  }
+  function applyVolume(v){
+    var vol = Math.max(0, Math.min(1, Number(v)));
+    if(!isFinite(vol)) return;
+    volBase = vol;
+    if(!ducked){ elVideo.volume = vol; elAudio.volume = vol; }
+    var s = String(Math.round(vol * 100));
+    if($('#vol').value !== s) $('#vol').value = s;
+  }
+  $('#vol').oninput = function(){
+    volBase = this.value / 100;
+    if(!ducked){ elVideo.volume = volBase; elAudio.volume = volBase; }
+    clearTimeout(volTimer);
+    volTimer = setTimeout(function(){ send('volume', {volume: volBase}); }, 180);
+  };
+
+  $('#talkBtn').onclick = function(){ if(dj) djStop(); else djStart(); };
+
+  var seek = $('#seek');
+  seek.addEventListener('pointerdown', function(){ dragging = true; });
+  seek.addEventListener('input', function(){
+    var d = player.duration || 0;
+    if(d){ try{ player.currentTime = (seek.value/10000) * d; }catch(e){} $('#tCur').textContent = fmt((seek.value/10000)*d); }
+  });
+  seek.addEventListener('change', function(){
+    dragging = false;
+    var d = player.duration || 0;
+    if(d) send('seek', {posMs: Math.round((seek.value/10000) * d * 1000)});
+  });
+  document.addEventListener('pointerup', function(){ setTimeout(function(){ dragging = false; }, 80); });
+
+  $('#file').onchange = async function(){
+    var fs = Array.prototype.slice.call(this.files || []);
+    for(var i=0;i<fs.length;i++){
+      $('#upstat').textContent = 'uploading ' + fs[i].name + '…';
+      var ok = await upFile(fs[i]);
+      $('#upstat').textContent = (ok ? '✓ ' : '✗ failed: ') + fs[i].name;
+    }
+    this.value = '';
+    await loadMediaList();
+  };
+
+  $('#copyBtn').onclick = function(){
+    var t = $('#roomLink').textContent;
+    navigator.clipboard && navigator.clipboard.writeText(t);
+    this.textContent = 'copied'; var b = this; setTimeout(function(){ b.textContent = 'copy'; }, 1200);
+  };
+
+  $('#roomGo').onclick = function(){ goRoom($('#roomInput').value); };
+  $('#roomInput').addEventListener('keydown', function(e){ if(e.key === 'Enter') goRoom(this.value); });
+
+  var ji = $('#nameInput');
+  ji.value = name;
+  $('#joinBtn').onclick = function(){
+    var v = (ji.value || '').trim();
+    if(!v){ ji.focus(); return; }
+    name = v; localStorage.setItem('syncstream.name', name);
+    try{ sessionStorage.setItem('syncstream.joined', '1'); }catch(e){}
+    joined = true; blocked = false;
+    $('#whos').textContent = 'you: ' + name;
+    $('#join').classList.add('hidden');
+    if(state && state.mediaId && state.playing) tryPlay();
+  };
+  ji.addEventListener('keydown', function(e){ if(e.key === 'Enter') $('#joinBtn').click(); });
+
+  document.addEventListener('visibilitychange', function(){
+    if(!document.hidden){
+      correct(true); syncClock();
+      if(state && state.playing && joined && !blocked) tryPlay();
+      probeDurations();
+    }
+  });
+  window.addEventListener('online', function(){ correct(true); connect(); });
+
+  // ---------------------------------------------------------------- boot
+  $('#roomName').textContent = roomId;
+  $('#roomLink').textContent = location.origin + '/r/' + roomId;
+  if(name){ $('#whos').textContent = 'you: ' + name; ji.value = name; }
+  if(joined && name) $('#join').classList.add('hidden');
+  mediaSessionControls();
+  setConn('connecting…', null);
+  renderPlaylist([]);
+
+  // ?debug=1 exposes the audio internals so the talk path can be checked from an automated browser
+  // (and poked at by hand). Nothing runs differently; it only publishes references.
+  if(new URLSearchParams(location.search).get('debug') === '1'){
+    window.SyncStream = {
+      roomId: roomId,
+      state: function(){ return state; },
+      playTalk: playTalk,
+      downsample: downsample,
+      toPcm: toPcm,
+      flushTalk: flushTalk,
+      onAir: function(){ return !!dj; },
+      sent: function(){ return dj ? dj.sent : 0; },
+      ctxState: function(){ return talkCtx ? talkCtx.state : 'none'; },
+    };
+  }
+
+  (async function(){
+    await syncClock();
+    await loadMediaList();
+    loadRooms();
+    connect();
+    setInterval(function(){
+      if(!state) return;
+      correct(false);
+      if(!dragging){
+        var d = player.duration || 0;
+        if(d){ seek.value = Math.round((player.currentTime / d) * 10000); $('#tDur').textContent = fmt(d); }
+        $('#tCur').textContent = fmt(player.currentTime);
+      }
+      if(++tickN % 5 === 0) mediaSessionPosition();
+      if(es){
+        if(es.readyState === 1) setConn('live', 'live');
+        else if(es.readyState === 0) setConn('connecting…', '');
+        else setConn('reconnecting…', 'warn');
+      }
+    }, 200);
+    setInterval(syncClock, 30000);
+    setInterval(loadMediaList, 60000);
+    setInterval(loadRooms, 15000);
+  })();
+})();
+</script>
+</body>
+</html>
