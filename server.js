@@ -142,9 +142,15 @@ function saveRooms() {
     const now = Date.now();
     const out = [];
     for (const r of rooms.values()) {
+      const lastActive = r.lastActive || r.updatedAt || now;
+      // A station nobody has touched for a week, with nothing queued, is not worth remembering.
+      if (!r.mediaId && !r.clients.size && now - lastActive > 7 * 24 * 3600 * 1000) {
+        rooms.delete(r.id);
+        continue;
+      }
       out.push({ id: r.id, mediaId: r.mediaId, playing: r.playing, posMs: posOf(r, now),
                  volume: typeof r.volume === 'number' ? r.volume : 1,
-                 savedAt: now, lastActive: r.lastActive || r.updatedAt || now });
+                 savedAt: now, lastActive: lastActive });
     }
     try {
       fs.mkdirSync(DATA_DIR, { recursive: true });
@@ -179,6 +185,9 @@ async function roomsList() {
   const list = await mediaList(1500);
   const now = Date.now();
   return [...rooms.values()]
+    // A leading underscore marks a room as disposable (the test suites use them), so they never
+    // clutter the list a listener sees.
+    .filter((r) => !r.id.startsWith('_'))
     .filter((r) => r.mediaId || r.clients.size || (now - (r.lastActive || 0)) < 24 * 3600 * 1000)
     .map((r) => {
       const m = list.find((x) => x.id === r.mediaId);

@@ -13,7 +13,7 @@ import base64, json, os, struct, sys, threading, time, urllib.error, urllib.pars
 BASE = sys.argv[1] if len(sys.argv) > 1 else "http://127.0.0.1:8080"
 PW = sys.argv[2] if len(sys.argv) > 2 else os.environ.get("SYNC_PASSWORD", "")
 UA = {"User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 Chrome/153 Safari/537.36"}
-ROOM = "talktest"
+ROOM = "_talktest"
 ok = True
 
 
