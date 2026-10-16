@@ -13,6 +13,24 @@ docker compose up -d      # then open http://localhost:8080
 
 ![Sync Stream](docs/screenshot.png)
 
+*Desktop: one shared playhead, a playlist anyone can drive, rooms with what each is playing, and the
+DJ talk button. The status row shows the live link and the current sync error — here `sync: +0 ms
+(net ±8ms)`.*
+
+### On a phone
+
+<img src="docs/mobile.png" alt="Phone layout" width="320">
+
+*The player collapses to a compact card (audio does not need a cinema above the fold) so the playlist
+and rooms are reachable without scrolling.*
+
+### DJ push-to-talk
+
+![DJ on air](docs/talk.png)
+
+*While someone is talking, the room reports it and every device ducks the music to 18 % — quieter,
+not muted — then fades it back.*
+
 ## What it does
 
 - **Tight sync, server-authoritative.** The server publishes `{posMs, anchor}` (the server clock at
